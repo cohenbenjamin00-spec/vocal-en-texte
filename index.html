@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vocal en texte</title>
+<meta name="description" content="Transcrit les notes vocales WhatsApp en texte copiable.">
+<meta name="theme-color" content="#4f46e5">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root {
+    --bg: #f5f6fa; --card: #ffffff; --text: #16181d; --muted: #6b7180;
+    --border: #e3e5ec; --accent: #4f46e5; --accent-text: #ffffff;
+    --ok: #15803d; --err: #b91c1c; --field: #f9fafc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --card: #181b22; --text: #eceef3; --muted: #9aa0ad;
+      --border: #2a2e38; --accent: #6d66f2; --accent-text: #ffffff;
+      --ok: #4ade80; --err: #f87171; --field: #12141a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  }
+  main { max-width: 640px; margin: 0 auto; display: grid; gap: 14px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  h1 { font-size: 1.25rem; margin: 0; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+  .status { display: flex; align-items: center; gap: 10px; color: var(--muted); min-height: 24px; }
+  .status.ok { color: var(--ok); } .status.err { color: var(--err); }
+  .spinner {
+    width: 18px; height: 18px; border-radius: 50%; flex: none;
+    border: 2px solid var(--border); border-top-color: var(--accent);
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  textarea, input, select {
+    width: 100%; font: inherit; color: var(--text); background: var(--field);
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+  }
+  textarea { min-height: 180px; resize: vertical; }
+  label { display: grid; gap: 6px; font-size: .9rem; color: var(--muted); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .row > * { flex: 1 1 140px; }
+  button, .btn {
+    font: inherit; font-weight: 600; border-radius: 10px; padding: 12px 14px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--card); color: var(--text);
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-align: center;
+  }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  .icon-btn { padding: 8px 12px; font-weight: 500; font-size: .9rem; }
+  .muted { color: var(--muted); font-size: .9rem; }
+  .settings { display: grid; gap: 12px; }
+  .hidden { display: none !important; }
+  a { color: var(--accent); }
+  details summary { cursor: pointer; font-weight: 600; }
+  .history { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 8px; }
+  .history li {
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; cursor: pointer;
+    background: var(--field);
+  }
+  .history time { display: block; font-size: .8rem; color: var(--muted); }
+  .history p { margin: 2px 0 0; overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+    -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  input[type=file] { display: none; }
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px;
+    font-weight: 600; opacity: 0; transition: opacity .2s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Vocal en texte</h1>
+    <button class="icon-btn" id="toggleSettings" type="button">Réglages</button>
+  </header>
+
+  <section class="card settings hidden" id="settings">
+    <label>Clé API Groq
+      <input id="apiKey" type="password" autocomplete="off" placeholder="gsk_…">
+    </label>
+    <p class="muted" style="margin:0">
+      Clé gratuite sur <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a>.
+      Elle reste uniquement sur ce téléphone.
+    </p>
+    <div class="row">
+      <label>Langue
+        <select id="language">
+          <option value="fr">Français</option>
+          <option value="">Détection auto</option>
+          <option value="en">Anglais</option>
+          <option value="he">Hébreu</option>
+          <option value="ar">Arabe</option>
+          <option value="es">Espagnol</option>
+        </select>
+      </label>
+      <label>Modèle
+        <select id="model">
+          <option value="whisper-large-v3">Précis (large-v3)</option>
+          <option value="whisper-large-v3-turbo">Rapide (turbo)</option>
+        </select>
+      </label>
+    </div>
+    <button class="primary" id="saveSettings" type="button">Enregistrer</button>
+  </section>
+
+  <section class="card" style="display:grid;gap:12px">
+    <div class="status" id="status">Partage une note vocale depuis WhatsApp vers cette app.</div>
+    <textarea id="result" placeholder="La transcription apparaîtra ici…"></textarea>
+    <div class="row">
+      <button class="primary" id="copy" type="button" disabled>Copier le texte</button>
+      <button id="share" type="button" disabled>Partager</button>
+    </div>
+    <label class="btn" for="filePicker" style="color:var(--text)">Choisir un fichier audio…</label>
+    <input id="filePicker" type="file" accept="audio/*,.opus,.ogg,.m4a,.mp3,.wav">
+  </section>
+
+  <section class="card">
+    <details id="historyBox">
+      <summary>Historique</summary>
+      <ul class="history" id="history"></ul>
+      <p class="muted hidden" id="historyEmpty">Aucune transcription pour l'instant.</p>
+    </details>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const API_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
+  const OK_EXT = ['flac', 'mp3', 'mp4', 'mpeg', 'mpga', 'm4a', 'ogg', 'opus', 'wav', 'webm'];
+  const TYPE_EXT = {
+    'audio/ogg': 'ogg', 'application/ogg': 'ogg', 'audio/opus': 'opus', 'audio/mpeg': 'mp3',
+    'audio/mp3': 'mp3', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/m4a': 'm4a',
+    'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/webm': 'webm', 'audio/flac': 'flac',
+  };
+
+  // ---- Stockage local (protégé : certains navigateurs le bloquent) ----
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  };
+
+  let settings = Object.assign({ apiKey: '', language: 'fr', model: 'whisper-large-v3' }, store.get('settings', {}));
+  let pending = null; // audio en attente si la clé n'est pas encore saisie
+
+  // ---- UI helpers ----
+  function setStatus(text, kind) {
+    const el = $('status');
+    el.className = 'status' + (kind && kind !== 'busy' ? ' ' + kind : '');
+    el.innerHTML = '';
+    if (kind === 'busy') { const s = document.createElement('span'); s.className = 'spinner'; el.append(s); }
+    el.append(document.createTextNode(text));
+  }
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1600);
+  }
+  function refreshButtons() {
+    const has = $('result').value.trim().length > 0;
+    $('copy').disabled = !has;
+    $('share').disabled = !has || !navigator.share;
+  }
+  function showSettings(show) { $('settings').classList.toggle('hidden', !show); }
+  function fillSettings() {
+    $('apiKey').value = settings.apiKey;
+    $('language').value = settings.language;
+    $('model').value = settings.model;
+  }
+
+  // ---- Historique ----
+  function renderHistory() {
+    const list = store.get('history', []);
+    const ul = $('history'); ul.innerHTML = '';
+    $('historyEmpty').classList.toggle('hidden', list.length > 0);
+    for (const item of list) {
+      const li = document.createElement('li');
+      const time = document.createElement('time');
+      time.textContent = new Date(item.date).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+      const p = document.createElement('p'); p.textContent = item.text;
+      li.append(time, p);
+      li.addEventListener('click', () => {
+        $('result').value = item.text; refreshButtons();
+        setStatus('Transcription de l’historique.', 'ok');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+      ul.append(li);
+    }
+  }
+  function addHistory(text) {
+    const list = store.get('history', []);
+    list.unshift({ date: Date.now(), text });
+    store.set('history', list.slice(0, 30));
+    renderHistory();
+  }
+
+  // ---- Transcription ----
+  function fileNameFor(name, type) {
+    const base = (name || 'note-vocale').replace(/[^\w.\-]+/g, '_');
+    const ext = (base.includes('.') ? base.split('.').pop() : '').toLowerCase();
+    if (OK_EXT.includes(ext)) return base;
+    const mime = (type || '').split(';')[0].trim().toLowerCase();
+    return base + '.' + (TYPE_EXT[mime] || 'ogg');
+  }
+
+  async function transcribe(blob, name) {
+    if (!settings.apiKey) {
+      pending = { blob, name };
+      fillSettings(); showSettings(true);
+      setStatus('Ajoute ta clé API Groq dans les réglages, la note sera transcrite ensuite.', 'err');
+      $('apiKey').focus();
+      return;
+    }
+    pending = null;
+    $('result').value = ''; refreshButtons();
+    setStatus('Transcription en cours…', 'busy');
+
+    const form = new FormData();
+    form.append('file', blob, fileNameFor(name, blob.type));
+    form.append('model', settings.model);
+    form.append('response_format', 'json');
+    form.append('temperature', '0');
+    if (settings.language) form.append('language', settings.language);
+
+    try {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + settings.apiKey },
+        body: form,
+      });
+      if (!res.ok) {
+        let detail = '';
+        try { detail = (await res.json()).error?.message || ''; } catch {}
+        if (res.status === 401) throw new Error('Clé API invalide. Vérifie-la dans les réglages.');
+        if (res.status === 429) throw new Error('Limite gratuite atteinte, réessaie dans un moment.');
+        if (res.status === 413) throw new Error('Fichier trop lourd (max 25 Mo).');
+        throw new Error('Erreur ' + res.status + (detail ? ' : ' + detail : ''));
+      }
+      const data = await res.json();
+      const text = (data.text || '').trim();
+      $('result').value = text; refreshButtons();
+      if (text) {
+        addHistory(text);
+        setStatus('Terminé. Appuie sur « Copier le texte ».', 'ok');
+      } else {
+        setStatus('Aucune parole détectée dans cet audio.', 'err');
+      }
+    } catch (e) {
+      const msg = e instanceof TypeError ? 'Pas de connexion Internet ?' : e.message;
+      setStatus(msg, 'err');
+    }
+  }
+
+  async function handleSharedFile() {
+    const params = new URLSearchParams(location.search);
+    if (!params.has('shared')) return;
+    history.replaceState(null, '', location.pathname); // évite de retranscrire au rechargement
+    try {
+      const cache = await caches.open('shared-files');
+      const res = await cache.match('shared-audio');
+      if (!res) { setStatus('Aucun fichier audio reçu. Partage bien la note vocale elle-même.', 'err'); return; }
+      await cache.delete('shared-audio');
+      const name = decodeURIComponent(res.headers.get('X-Filename') || 'note-vocale');
+      const blob = await res.blob();
+      await transcribe(blob, name);
+    } catch (e) {
+      setStatus('Impossible de lire le fichier partagé.', 'err');
+    }
+  }
+
+  // ---- Événements ----
+  $('toggleSettings').addEventListener('click', () => {
+    fillSettings(); showSettings($('settings').classList.contains('hidden'));
+  });
+  $('saveSettings').addEventListener('click', () => {
+    settings = {
+      apiKey: $('apiKey').value.trim(),
+      language: $('language').value,
+      model: $('model').value,
+    };
+    store.set('settings', settings);
+    showSettings(false);
+    toast('Réglages enregistrés');
+    if (pending && settings.apiKey) transcribe(pending.blob, pending.name);
+    else if (!settings.apiKey) setStatus('Il faut une clé API Groq pour transcrire.', 'err');
+  });
+  $('copy').addEventListener('click', async () => {
+    const text = $('result').value;
+    try { await navigator.clipboard.writeText(text); }
+    catch { $('result').select(); document.execCommand('copy'); }
+    toast('Texte copié ✓');
+  });
+  $('share').addEventListener('click', () => {
+    navigator.share({ text: $('result').value }).catch(() => {});
+  });
+  $('result').addEventListener('input', refreshButtons);
+  $('filePicker').addEventListener('change', (e) => {
+    const f = e.target.files[0];
+    if (f) transcribe(f, f.name);
+    e.target.value = '';
+  });
+
+  // ---- Démarrage ----
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+  renderHistory();
+  refreshButtons();
+  if (!settings.apiKey) {
+    fillSettings(); showSettings(true);
+    setStatus('Première utilisation : colle ta clé API Groq dans les réglages.');
+  }
+  handleSharedFile();
+})();
+</script>
+</body>
+</html>
